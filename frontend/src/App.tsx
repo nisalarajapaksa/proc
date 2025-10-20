@@ -82,6 +82,7 @@ function TaskBreakdownApp() {
                   goals={confirmedTask.goals}
                   taskId={confirmedTask.taskId}
                   onGoalsUpdate={handleGoalsUpdate}
+                  onDeleteAll={handleStartOver}
                 />
               </div>
               <div className="text-center">

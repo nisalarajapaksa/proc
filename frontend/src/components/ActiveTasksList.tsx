@@ -10,12 +10,14 @@ interface ActiveTasksListProps {
   goals: MicroGoal[];
   taskId: number;
   onGoalsUpdate: (goals: MicroGoal[]) => void;
+  onDeleteAll?: () => void;
 }
 
 export const ActiveTasksList: React.FC<ActiveTasksListProps> = ({
   goals: initialGoals,
   taskId,
   onGoalsUpdate,
+  onDeleteAll,
 }) => {
   const [goals, setGoals] = useState<MicroGoal[]>(initialGoals);
   const [completionModal, setCompletionModal] = useState<{ isOpen: boolean; goalId?: number; title?: string }>({
@@ -24,6 +26,7 @@ export const ActiveTasksList: React.FC<ActiveTasksListProps> = ({
   const [showProgressOverlay, setShowProgressOverlay] = useState(false);
   const [progressData, setProgressData] = useState<ProgressDataResponse | null>(null);
   const [isLoadingProgress, setIsLoadingProgress] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
   useEffect(() => {
@@ -73,6 +76,19 @@ export const ActiveTasksList: React.FC<ActiveTasksListProps> = ({
     } finally {
       setIsLoadingProgress(false);
     }
+  };
+
+  const handleDeleteAllTasks = async () => {
+    try {
+      await tasksApi.delete(taskId);
+      if (onDeleteAll) {
+        onDeleteAll();
+      }
+    } catch (error) {
+      console.error('Failed to delete tasks:', error);
+      alert('Failed to delete tasks. Please try again.');
+    }
+    setShowDeleteConfirm(false);
   };
 
   const handleUpdateGoal = (index: number, updatedGoal: MicroGoal) => {
@@ -176,7 +192,16 @@ export const ActiveTasksList: React.FC<ActiveTasksListProps> = ({
       <div className="mb-6">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-2xl font-bold text-gray-800">Your Daily Tasks</h2>
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setShowDeleteConfirm(true)}
+              className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg font-semibold hover:bg-red-700 transition-all shadow-md hover:shadow-lg"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+              </svg>
+              Delete All
+            </button>
             <button
               onClick={handleShowProgress}
               className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-600 to-blue-600 text-white rounded-lg font-semibold hover:from-purple-700 hover:to-blue-700 transition-all shadow-md hover:shadow-lg"
@@ -277,6 +302,39 @@ export const ActiveTasksList: React.FC<ActiveTasksListProps> = ({
           }}
           isLoadingTips={isLoadingProgress}
         />
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {showDeleteConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4">
+          <div className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6">
+            <div className="mb-4">
+              <div className="flex items-center justify-center w-12 h-12 mx-auto mb-4 bg-red-100 rounded-full">
+                <svg className="w-6 h-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+              </div>
+              <h3 className="text-xl font-bold text-gray-900 text-center mb-2">Delete All Tasks?</h3>
+              <p className="text-gray-600 text-center">
+                Are you sure you want to delete all your daily tasks? This action cannot be undone and all progress will be lost.
+              </p>
+            </div>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowDeleteConfirm(false)}
+                className="flex-1 px-4 py-2 bg-gray-200 text-gray-800 rounded-lg font-semibold hover:bg-gray-300 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDeleteAllTasks}
+                className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg font-semibold hover:bg-red-700 transition-colors"
+              >
+                Delete All
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
