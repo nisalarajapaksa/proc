@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from typing import List
+from datetime import datetime, timedelta
 
 from app.core.database import get_db
 from app.models.task import Task, MicroGoal
@@ -31,21 +32,44 @@ async def breakdown_tasks(
         # Create task record (not confirmed yet)
         task = Task(
             user_input=task_input.tasks_text,
-            confirmed=False
+            confirmed=False,
+            starting_time=task_input.starting_time
         )
         db.add(task)
         db.flush()  # Get the task ID
 
+        # Calculate times for each micro-goal if starting_time is provided
+        current_time = task_input.starting_time
+
         # Create micro-goal records
         micro_goals = []
         for idx, goal_data in enumerate(micro_goals_data):
+            start_time = None
+            end_time = None
+
+            if current_time:
+                # Convert time to datetime for calculation
+                today = datetime.today()
+                current_datetime = datetime.combine(today, current_time)
+                start_time = current_time
+
+                # Calculate end time
+                estimated_minutes = goal_data.get("estimated_minutes", 30)
+                end_datetime = current_datetime + timedelta(minutes=estimated_minutes)
+                end_time = end_datetime.time()
+
+                # Update current_time for next micro-goal
+                current_time = end_time
+
             micro_goal = MicroGoal(
                 task_id=task.id,
                 title=goal_data.get("title", ""),
                 description=goal_data.get("description", ""),
                 estimated_minutes=goal_data.get("estimated_minutes", 30),
                 order=goal_data.get("order", idx),
-                completed=False
+                completed=False,
+                starting_time=start_time,
+                end_time=end_time
             )
             db.add(micro_goal)
             micro_goals.append(micro_goal)

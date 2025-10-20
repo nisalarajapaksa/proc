@@ -77,6 +77,13 @@ export const MicroGoalCard: React.FC<MicroGoalCardProps> = ({
     );
   }
 
+  const formatTime = (timeString?: string) => {
+    if (!timeString) return null;
+    // timeString is in HH:MM:SS format, convert to HH:MM for display
+    const parts = timeString.split(':');
+    return `${parts[0]}:${parts[1]}`;
+  };
+
   return (
     <div className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm hover:shadow-md transition-shadow">
       <div className="flex items-start justify-between">
@@ -85,10 +92,15 @@ export const MicroGoalCard: React.FC<MicroGoalCardProps> = ({
           {goal.description && (
             <p className="text-sm text-gray-600 mb-2">{goal.description}</p>
           )}
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
               {formatMinutes(goal.estimated_minutes)}
             </span>
+            {goal.starting_time && goal.end_time && (
+              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                {formatTime(goal.starting_time)} - {formatTime(goal.end_time)}
+              </span>
+            )}
           </div>
         </div>
         {isEditable && (

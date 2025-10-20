@@ -1,11 +1,12 @@
 from pydantic import BaseModel, Field
-from typing import List
-from datetime import datetime
+from typing import List, Optional
+from datetime import datetime, time
 
 
 class TaskInput(BaseModel):
     """User's raw input of daily tasks"""
     tasks_text: str = Field(..., min_length=1, description="Raw text containing all tasks for the day")
+    starting_time: Optional[time] = Field(None, description="Starting time for the first micro-goal")
 
 
 class MicroGoalSchema(BaseModel):
@@ -16,6 +17,8 @@ class MicroGoalSchema(BaseModel):
     estimated_minutes: int = Field(..., gt=0, le=480, description="Estimated time in minutes (max 8 hours)")
     order: int = Field(..., ge=0)
     completed: bool = False
+    starting_time: Optional[time] = None
+    end_time: Optional[time] = None
 
     class Config:
         from_attributes = True
@@ -34,6 +37,7 @@ class TaskResponse(BaseModel):
     user_input: str
     created_at: datetime
     confirmed: bool
+    starting_time: Optional[time] = None
     micro_goals: List[MicroGoalSchema]
 
     class Config:

@@ -22,51 +22,53 @@ class LLMService:
             List of micro-goals with title, description, and estimated_minutes
         """
 
-        prompt = f"""You are a productivity assistant that helps people break down their daily tasks into manageable micro-goals.
+        prompt = f"""Break down these tasks into actionable micro-goals (5-25 min each):
 
-Analyze the following tasks and break them down into specific, actionable micro-goals. Each micro-goal should:
-1. Be specific and actionable
-2. Take between 5-25 minutes to complete(ideal for Pomodoro sessions). If a goal takes longer than 45 minutes, divide it into smaller Pomodoro-sized chunks.
-3. Be ordered logically (dependencies first)
-4. Have a realistic time estimate
-5. Include a short “why” — explain how it connects to the user's larger goal (e.g., completing the online education project or professional growth).
-6. Add a mindset cue (motivation booster or reminder such as “Start ugly - progress > perfection” or “Future you will thank you”).
-7. Apply the 2-minute rule — if something can be started in under 2 minutes, mark it as “Do Now”.
-8. Use time blocks — suggest when in the day each micro-goal could fit (e.g., Morning Focus, Midday Sprint, Evening Wrap-up).
-9. Reward milestone — after 2-3 Pomodoros or completing a group of micro-goals, suggest a small break or reward.
-10. (Optional) If the task is repetitive or study-based (e.g., revising, memorizing, training problem patterns), emphasize consistency over perfection and spread the micro-goals across days.
-
-User's tasks:
 {tasks_text}
 
-Return ONLY a JSON array with this exact structure (no markdown, no code blocks, just pure JSON):
+Rules:
+- Each micro-goal should be specific and actionable
+- Estimate realistic time (5-25 minutes ideal)
+- Order logically (dependencies first)
+- Add brief description with context or motivation
+
+Return ONLY a JSON array (no markdown, no extra text):
 [
   {{
-    "title": "Clear, specific action to take",
-    "description": "Brief context or additional details",
-    "estimated_minutes": 30,
+    "title": "Specific action to take",
+    "description": "Brief context and motivation",
+    "estimated_minutes": 15,
     "order": 0
   }}
 ]
 
-Important:
-- Break large tasks into smaller steps
-- Be realistic with time estimates
-- Order tasks logically
-- Return ONLY valid JSON array, no other text, no markdown formatting
-"""
+Return pure JSON only."""
 
         try:
             # Generate content using Gemini (run in executor since it's blocking)
             loop = asyncio.get_event_loop()
 
             # Configure safety settings to be less restrictive
-            safety_settings = {
-                'HARM_CATEGORY_HARASSMENT': 'BLOCK_NONE',
-                'HARM_CATEGORY_HATE_SPEECH': 'BLOCK_NONE',
-                'HARM_CATEGORY_SEXUALLY_EXPLICIT': 'BLOCK_NONE',
-                'HARM_CATEGORY_DANGEROUS_CONTENT': 'BLOCK_NONE',
-            }
+            from google.generativeai.types import HarmCategory, HarmBlockThreshold
+
+            safety_settings = [
+                {
+                    "category": HarmCategory.HARM_CATEGORY_HARASSMENT,
+                    "threshold": HarmBlockThreshold.BLOCK_NONE,
+                },
+                {
+                    "category": HarmCategory.HARM_CATEGORY_HATE_SPEECH,
+                    "threshold": HarmBlockThreshold.BLOCK_NONE,
+                },
+                {
+                    "category": HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
+                    "threshold": HarmBlockThreshold.BLOCK_NONE,
+                },
+                {
+                    "category": HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
+                    "threshold": HarmBlockThreshold.BLOCK_NONE,
+                },
+            ]
 
             generate_func = partial(
                 self.model.generate_content,
@@ -81,12 +83,48 @@ Important:
             )
             response = await loop.run_in_executor(None, generate_func)
 
-            # Check if response was blocked
-            if not response.text:
-                print(f"DEBUG: Response blocked. Finish reason: {response.prompt_feedback}")
-                raise ValueError(f"Content generation blocked by safety filters. Please try rephrasing your tasks.")
+            # Check if response was blocked or has no valid parts
+            print(f"DEBUG: Response candidates: {response.candidates if hasattr(response, 'candidates') else 'N/A'}")
+            print(f"DEBUG: Prompt feedback: {response.prompt_feedback if hasattr(response, 'prompt_feedback') else 'N/A'}")
 
-            content = response.text.strip()
+            # Check if we have valid parts in the response
+            if not response.candidates or len(response.candidates) == 0:
+                raise ValueError(f"No response generated. The request may have been blocked by safety filters. Please try rephrasing your tasks.")
+
+            candidate = response.candidates[0]
+            print(f"DEBUG: Finish reason: {candidate.finish_reason}")
+            print(f"DEBUG: Finish reason name: {candidate.finish_reason.name if hasattr(candidate.finish_reason, 'name') else 'N/A'}")
+
+            # Check finish reason
+            # FinishReason enum: 0=UNSPECIFIED, 1=STOP (success), 2=MAX_TOKENS, 3=SAFETY, 4=RECITATION, 5=OTHER
+            finish_reason_value = int(candidate.finish_reason) if hasattr(candidate.finish_reason, '__int__') else candidate.finish_reason
+            finish_reason_name = candidate.finish_reason.name if hasattr(candidate.finish_reason, 'name') else str(finish_reason_value)
+
+            # Check if we have valid content parts first
+            if not candidate.content or not candidate.content.parts:
+                # No content parts - likely blocked
+                if hasattr(candidate, 'safety_ratings'):
+                    print(f"DEBUG: Safety ratings: {candidate.safety_ratings}")
+
+                if finish_reason_value == 3 or finish_reason_name == 'SAFETY':
+                    raise ValueError(f"Content generation blocked by safety filters. Please try rephrasing your tasks with simpler language.")
+                else:
+                    raise ValueError(f"No valid content returned. Finish reason: {finish_reason_name} ({finish_reason_value})")
+
+            # If we got here, we have content parts - check for truncation
+            if finish_reason_value == 2 or finish_reason_name == 'MAX_TOKENS':
+                print(f"WARNING: Response may be truncated due to max tokens limit")
+                # We'll try to process it anyway and fix incomplete JSON later
+
+            # Extract text safely
+            try:
+                content = response.text.strip()
+            except ValueError as e:
+                # If response.text accessor fails, try to get text from parts directly
+                if candidate.content.parts:
+                    content = candidate.content.parts[0].text.strip()
+                else:
+                    raise ValueError(f"Unable to extract text from response: {str(e)}")
             print(f"DEBUG: Full Gemini response length: {len(content)}")
             print(f"DEBUG: Response ends with: '{content[-100:]}'")  # Check ending
 

@@ -1,17 +1,20 @@
 import { useState } from 'react';
 
 interface TaskInputProps {
-  onSubmit: (tasksText: string) => void;
+  onSubmit: (tasksText: string, startingTime?: string) => void;
   isLoading: boolean;
 }
 
 export const TaskInput: React.FC<TaskInputProps> = ({ onSubmit, isLoading }) => {
   const [tasksText, setTasksText] = useState('');
+  const [startingTime, setStartingTime] = useState('');
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (tasksText.trim()) {
-      onSubmit(tasksText);
+      // Convert HH:MM to HH:MM:SS format if provided
+      const timeWithSeconds = startingTime ? `${startingTime}:00` : undefined;
+      onSubmit(tasksText, timeWithSeconds);
     }
   };
 
@@ -30,6 +33,23 @@ export const TaskInput: React.FC<TaskInputProps> = ({ onSubmit, isLoading }) => 
           onChange={(e) => setTasksText(e.target.value)}
           disabled={isLoading}
         />
+      </div>
+
+      <div className="mb-4">
+        <label htmlFor="startingTime" className="block text-sm font-semibold mb-2 text-gray-700">
+          Starting Time (optional)
+        </label>
+        <input
+          type="time"
+          id="startingTime"
+          className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          value={startingTime}
+          onChange={(e) => setStartingTime(e.target.value)}
+          disabled={isLoading}
+        />
+        <p className="mt-1 text-sm text-gray-500">
+          Set when you want to start your first task
+        </p>
       </div>
 
       <button
