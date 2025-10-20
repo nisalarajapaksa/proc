@@ -4,13 +4,15 @@ from typing import List
 from datetime import datetime, timedelta
 
 from app.core.database import get_db
-from app.models.task import Task, MicroGoal
+from app.models.task import Task, MicroGoal, ExecutionEvent
 from app.schemas.task import (
     TaskInput,
     TaskBreakdownResponse,
     TaskResponse,
     TaskConfirm,
-    MicroGoalSchema
+    MicroGoalSchema,
+    ExecutionEventSchema,
+    ExecutionSummary
 )
 from app.services.llm_service import llm_service
 
@@ -248,3 +250,197 @@ async def delete_task(task_id: int, db: Session = Depends(get_db)):
     db.commit()
 
     return {"message": "Task deleted successfully"}
+
+
+# Pomodoro Timer Control Endpoints
+
+@router.post("/micro-goals/{goal_id}/start", response_model=MicroGoalSchema)
+async def start_micro_goal(goal_id: int, db: Session = Depends(get_db)):
+    """
+    Start a micro-goal timer
+    """
+    # Stop any currently active micro-goals
+    db.query(MicroGoal).filter(MicroGoal.is_active == True).update({"is_active": False})
+
+    micro_goal = db.query(MicroGoal).filter(MicroGoal.id == goal_id).first()
+    if not micro_goal:
+        raise HTTPException(status_code=404, detail="Micro-goal not found")
+
+    if micro_goal.completed:
+        raise HTTPException(status_code=400, detail="Cannot start a completed task")
+
+    now = datetime.utcnow()
+    micro_goal.is_active = True
+    micro_goal.is_paused = False
+    if not micro_goal.actual_start_time:
+        micro_goal.actual_start_time = now
+
+    # Log execution event
+    event = ExecutionEvent(
+        micro_goal_id=goal_id,
+        action="start",
+        timestamp=now,
+        time_spent_at_event=micro_goal.time_spent_seconds or 0
+    )
+    db.add(event)
+
+    db.commit()
+    db.refresh(micro_goal)
+
+    return MicroGoalSchema.model_validate(micro_goal)
+
+
+@router.post("/micro-goals/{goal_id}/pause", response_model=MicroGoalSchema)
+async def pause_micro_goal(goal_id: int, db: Session = Depends(get_db)):
+    """
+    Pause a micro-goal timer
+    """
+    micro_goal = db.query(MicroGoal).filter(MicroGoal.id == goal_id).first()
+    if not micro_goal:
+        raise HTTPException(status_code=404, detail="Micro-goal not found")
+
+    if not micro_goal.is_active:
+        raise HTTPException(status_code=400, detail="Task is not active")
+
+    now = datetime.utcnow()
+    micro_goal.is_paused = True
+
+    # Log execution event
+    event = ExecutionEvent(
+        micro_goal_id=goal_id,
+        action="pause",
+        timestamp=now,
+        time_spent_at_event=micro_goal.time_spent_seconds or 0
+    )
+    db.add(event)
+
+    db.commit()
+    db.refresh(micro_goal)
+
+    return MicroGoalSchema.model_validate(micro_goal)
+
+
+@router.post("/micro-goals/{goal_id}/resume", response_model=MicroGoalSchema)
+async def resume_micro_goal(goal_id: int, db: Session = Depends(get_db)):
+    """
+    Resume a paused micro-goal timer
+    """
+    # Stop any currently active micro-goals
+    db.query(MicroGoal).filter(MicroGoal.is_active == True, MicroGoal.id != goal_id).update({"is_active": False})
+
+    micro_goal = db.query(MicroGoal).filter(MicroGoal.id == goal_id).first()
+    if not micro_goal:
+        raise HTTPException(status_code=404, detail="Micro-goal not found")
+
+    if not micro_goal.is_paused:
+        raise HTTPException(status_code=400, detail="Task is not paused")
+
+    now = datetime.utcnow()
+    micro_goal.is_paused = False
+
+    # Log execution event
+    event = ExecutionEvent(
+        micro_goal_id=goal_id,
+        action="resume",
+        timestamp=now,
+        time_spent_at_event=micro_goal.time_spent_seconds or 0
+    )
+    db.add(event)
+
+    db.commit()
+    db.refresh(micro_goal)
+
+    return MicroGoalSchema.model_validate(micro_goal)
+
+
+@router.post("/micro-goals/{goal_id}/complete", response_model=MicroGoalSchema)
+async def complete_micro_goal(goal_id: int, db: Session = Depends(get_db)):
+    """
+    Mark a micro-goal as completed
+    """
+    micro_goal = db.query(MicroGoal).filter(MicroGoal.id == goal_id).first()
+    if not micro_goal:
+        raise HTTPException(status_code=404, detail="Micro-goal not found")
+
+    now = datetime.utcnow()
+    micro_goal.completed = True
+    micro_goal.is_active = False
+    micro_goal.is_paused = False
+    micro_goal.actual_end_time = now
+
+    # Calculate total time spent
+    if micro_goal.actual_start_time:
+        time_diff = micro_goal.actual_end_time - micro_goal.actual_start_time
+        micro_goal.time_spent_seconds = int(time_diff.total_seconds())
+
+    # Log execution event
+    event = ExecutionEvent(
+        micro_goal_id=goal_id,
+        action="complete",
+        timestamp=now,
+        time_spent_at_event=micro_goal.time_spent_seconds or 0
+    )
+    db.add(event)
+
+    db.commit()
+    db.refresh(micro_goal)
+
+    return MicroGoalSchema.model_validate(micro_goal)
+
+
+@router.patch("/micro-goals/{goal_id}/time", response_model=MicroGoalSchema)
+async def update_time_spent(goal_id: int, time_spent_seconds: int, db: Session = Depends(get_db)):
+    """
+    Update the time spent on a micro-goal (for tracking elapsed time from frontend)
+    """
+    micro_goal = db.query(MicroGoal).filter(MicroGoal.id == goal_id).first()
+    if not micro_goal:
+        raise HTTPException(status_code=404, detail="Micro-goal not found")
+
+    micro_goal.time_spent_seconds = time_spent_seconds
+
+    db.commit()
+    db.refresh(micro_goal)
+
+    return MicroGoalSchema.model_validate(micro_goal)
+
+
+@router.get("/micro-goals/{goal_id}/execution-summary", response_model=ExecutionSummary)
+async def get_execution_summary(goal_id: int, db: Session = Depends(get_db)):
+    """
+    Get detailed execution summary comparing planned vs actual for a micro-goal
+    """
+    micro_goal = db.query(MicroGoal).filter(MicroGoal.id == goal_id).first()
+    if not micro_goal:
+        raise HTTPException(status_code=404, detail="Micro-goal not found")
+
+    # Get all execution events
+    events = db.query(ExecutionEvent).filter(
+        ExecutionEvent.micro_goal_id == goal_id
+    ).order_by(ExecutionEvent.timestamp).all()
+
+    # Calculate statistics
+    start_events = [e for e in events if e.action == "start"]
+    pause_events = [e for e in events if e.action == "pause"]
+    resume_events = [e for e in events if e.action == "resume"]
+    complete_events = [e for e in events if e.action == "complete"]
+
+    total_sessions = len(start_events) + len(resume_events)
+    total_pauses = len(pause_events)
+
+    actual_duration_seconds = micro_goal.time_spent_seconds or 0
+    actual_duration_minutes = actual_duration_seconds / 60.0
+    planned_duration_minutes = micro_goal.estimated_minutes
+    variance_minutes = actual_duration_minutes - planned_duration_minutes
+
+    return ExecutionSummary(
+        planned_duration_minutes=planned_duration_minutes,
+        actual_duration_seconds=actual_duration_seconds,
+        actual_duration_minutes=actual_duration_minutes,
+        variance_minutes=variance_minutes,
+        total_pauses=total_pauses,
+        total_sessions=total_sessions,
+        started_at=micro_goal.actual_start_time,
+        completed_at=micro_goal.actual_end_time,
+        events=[ExecutionEventSchema.model_validate(e) for e in events]
+    )

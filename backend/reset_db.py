@@ -8,7 +8,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from app.core.database import engine, Base
-from app.models.task import Task, MicroGoal
+from app.models.task import Task, MicroGoal, ExecutionEvent
 
 def reset_database():
     """Drop all tables and recreate them"""
@@ -20,8 +20,9 @@ def reset_database():
 
     print("Database reset complete!")
     print("New tables created:")
-    print("  - tasks (with starting_time column)")
-    print("  - micro_goals (with starting_time and end_time columns)")
+    print("  - tasks")
+    print("  - micro_goals (with timer state and execution_history)")
+    print("  - execution_events (detailed event logging for plan vs actual comparison)")
 
 if __name__ == "__main__":
     reset_database()
