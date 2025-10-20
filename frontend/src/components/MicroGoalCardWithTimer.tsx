@@ -205,9 +205,9 @@ export const MicroGoalCardWithTimer: React.FC<MicroGoalCardWithTimerProps> = ({
                 <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
                   isCompleted ? 'bg-gray-200 text-gray-600' : 'bg-blue-100 text-blue-800'
                 }`}>
-                  {formatMinutes(goal.estimated_minutes)}
+                  ⏱️ {formatMinutes(goal.estimated_minutes)}
                 </span>
-                {goal.starting_time && goal.end_time && (
+                {(goal.starting_time || goal.end_time) && (
                   <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
                     isCompleted
                       ? 'bg-gray-200 text-gray-600'
@@ -215,7 +215,7 @@ export const MicroGoalCardWithTimer: React.FC<MicroGoalCardWithTimerProps> = ({
                       ? 'bg-orange-100 text-orange-800'
                       : 'bg-green-100 text-green-800'
                   }`}>
-                    {formatTime(goal.starting_time)} - {formatTime(goal.end_time)}
+                    🕐 {formatTime(goal.starting_time) || '--:--'} - {formatTime(goal.end_time) || '--:--'}
                   </span>
                 )}
               </div>
