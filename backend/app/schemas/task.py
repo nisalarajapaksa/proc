@@ -7,6 +7,7 @@ class TaskInput(BaseModel):
     """User's raw input of daily tasks"""
     tasks_text: str = Field(..., min_length=1, description="Raw text containing all tasks for the day")
     starting_time: Optional[time] = Field(None, description="Starting time for the first micro-goal")
+    end_time: Optional[time] = Field(None, description="Desired end time for tasks")
 
 
 class MicroGoalSchema(BaseModel):
@@ -19,6 +20,9 @@ class MicroGoalSchema(BaseModel):
     completed: bool = False
     starting_time: Optional[time] = None
     end_time: Optional[time] = None
+    exceeds_end_time: bool = False  # Flag to indicate if this task goes beyond the user's desired end time
+    is_break: bool = False  # Flag to indicate if this is a Pomodoro break
+    break_type: Optional[str] = None  # "short" (5 min) or "long" (15 min)
 
     class Config:
         from_attributes = True

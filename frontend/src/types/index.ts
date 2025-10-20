@@ -7,11 +7,15 @@ export interface MicroGoal {
   completed: boolean;
   starting_time?: string;  // Time in HH:MM:SS format
   end_time?: string;       // Time in HH:MM:SS format
+  exceeds_end_time?: boolean;  // Flag if this task goes beyond desired end time
+  is_break?: boolean;  // Flag if this is a Pomodoro break
+  break_type?: 'short' | 'long';  // Type of break
 }
 
 export interface TaskInput {
   tasks_text: string;
   starting_time?: string;  // Time in HH:MM:SS format
+  end_time?: string;       // Time in HH:MM:SS format
 }
 
 export interface TaskBreakdownResponse {

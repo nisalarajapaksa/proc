@@ -47,15 +47,39 @@ export const MicroGoalsList: React.FC<MicroGoalsListProps> = ({
       </div>
 
       <div className="space-y-3 mb-6">
-        {goals.map((goal, index) => (
-          <MicroGoalCard
-            key={index}
-            goal={goal}
-            onUpdate={(updatedGoal) => handleUpdateGoal(index, updatedGoal)}
-            onDelete={() => handleDeleteGoal(index)}
-            isEditable={true}
-          />
-        ))}
+        {goals.map((goal, index) => {
+          // Check if this is the first goal that exceeds end time
+          const isFirstOverflow = goal.exceeds_end_time &&
+            (index === 0 || !goals[index - 1].exceeds_end_time);
+
+          return (
+            <div key={index}>
+              {isFirstOverflow && (
+                <div className="mb-4 mt-6">
+                  <div className="relative">
+                    <div className="absolute inset-0 flex items-center">
+                      <div className="w-full border-t-2 border-orange-400"></div>
+                    </div>
+                    <div className="relative flex justify-center">
+                      <span className="bg-gradient-to-br from-blue-50 to-indigo-100 px-4 py-2 text-sm font-semibold text-orange-700 rounded-full border-2 border-orange-400 shadow-sm">
+                        ⚠️ Tasks Beyond Your Desired End Time
+                      </span>
+                    </div>
+                  </div>
+                  <p className="text-center text-xs text-gray-600 mt-2">
+                    These tasks extend beyond your planned schedule
+                  </p>
+                </div>
+              )}
+              <MicroGoalCard
+                goal={goal}
+                onUpdate={(updatedGoal) => handleUpdateGoal(index, updatedGoal)}
+                onDelete={() => handleDeleteGoal(index)}
+                isEditable={true}
+              />
+            </div>
+          );
+        })}
       </div>
 
       {goals.length === 0 && (

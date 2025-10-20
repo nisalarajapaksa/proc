@@ -22,21 +22,28 @@ class LLMService:
             List of micro-goals with title, description, and estimated_minutes
         """
 
-        prompt = f"""Break down these tasks into actionable micro-goals (5-25 min each):
+        prompt = f"""Break down these tasks into small, focused micro-goals:
 
 {tasks_text}
 
-Rules:
-- Each micro-goal should be specific and actionable
-- Estimate realistic time (5-25 minutes ideal)
+IMPORTANT Rules:
+- Keep tasks SHORT: 10-20 minutes each (NOT 25-30 minutes)
+- Break large tasks into multiple smaller steps
 - Order logically (dependencies first)
-- Add brief description with context or motivation
+- Add brief description with motivation
 
-Return ONLY a JSON array (no markdown, no extra text):
+Example: Instead of "Write report (30 min)", create:
+- "Outline report structure (10 min)"
+- "Write introduction (15 min)"
+- "Draft main sections (20 min)"
+
+Note: System will auto-add breaks after 25+ min of accumulated work.
+
+Return ONLY a JSON array (no markdown):
 [
   {{
     "title": "Specific action to take",
-    "description": "Brief context and motivation",
+    "description": "Brief context",
     "estimated_minutes": 15,
     "order": 0
   }}
