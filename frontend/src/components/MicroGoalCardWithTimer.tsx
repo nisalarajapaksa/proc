@@ -175,38 +175,6 @@ export const MicroGoalCardWithTimer: React.FC<MicroGoalCardWithTimerProps> = ({
 
         {/* Task Content */}
         <div className="flex-1">
-          {/* Prominent Time Display */}
-          {(goal.starting_time || goal.end_time) && (
-            <div className={`mb-3 px-3 py-2 rounded-lg border-l-4 ${
-              isCompleted
-                ? 'bg-gray-50 border-gray-400'
-                : goal.exceeds_end_time
-                ? 'bg-orange-50 border-orange-500'
-                : 'bg-blue-50 border-blue-500'
-            }`}>
-              <div className="flex items-center gap-2">
-                <span className="text-lg">🕐</span>
-                <div className="flex-1">
-                  <div className={`text-xs font-medium mb-0.5 ${
-                    isCompleted ? 'text-gray-500' : 'text-gray-600'
-                  }`}>
-                    Scheduled Time
-                  </div>
-                  <div className={`text-base font-bold ${
-                    isCompleted
-                      ? 'text-gray-600'
-                      : goal.exceeds_end_time
-                      ? 'text-orange-700'
-                      : 'text-blue-700'
-                  }`}>
-                    {formatTime(goal.starting_time) || '--:--'} - {formatTime(goal.end_time) || '--:--'}
-                    <span className="text-sm font-normal ml-2">({formatMinutes(goal.estimated_minutes)})</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-
           <div className="flex items-start justify-between mb-2">
             <div className="flex-1">
               <div className="flex items-center gap-2 mb-1">
@@ -237,15 +205,16 @@ export const MicroGoalCardWithTimer: React.FC<MicroGoalCardWithTimerProps> = ({
           </div>
 
           {/* Control Buttons */}
-          <div className="flex gap-2 mt-3">
-            {!isCompleted && !isActiveTask && !hasActiveTask && (
-              <button
-                onClick={onStart}
-                className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-sm font-medium flex items-center gap-1"
-              >
-                <span>▶</span> Start
-              </button>
-            )}
+          <div className="flex items-center justify-between gap-3 mt-3">
+            <div className="flex gap-2">
+              {!isCompleted && !isActiveTask && !hasActiveTask && (
+                <button
+                  onClick={onStart}
+                  className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-sm font-medium flex items-center gap-1"
+                >
+                  <span>▶</span> Start
+                </button>
+              )}
 
             {isActiveTask && !goal.is_paused && (
               <>
@@ -281,20 +250,34 @@ export const MicroGoalCardWithTimer: React.FC<MicroGoalCardWithTimerProps> = ({
               </>
             )}
 
-            {isEditable && !isActiveTask && !isCompleted && (
-              <div className="ml-auto flex gap-2">
-                <button
-                  onClick={() => setIsEditing(true)}
-                  className="text-blue-600 hover:text-blue-800 text-sm font-medium"
-                >
-                  Edit
-                </button>
-                <button
-                  onClick={onDelete}
-                  className="text-red-600 hover:text-red-800 text-sm font-medium"
-                >
-                  Delete
-                </button>
+              {isEditable && !isActiveTask && !isCompleted && (
+                <div className="ml-auto flex gap-2">
+                  <button
+                    onClick={() => setIsEditing(true)}
+                    className="text-blue-600 hover:text-blue-800 text-sm font-medium"
+                  >
+                    Edit
+                  </button>
+                  <button
+                    onClick={onDelete}
+                    className="text-red-600 hover:text-red-800 text-sm font-medium"
+                  >
+                    Delete
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* Time Display next to buttons */}
+            {(goal.starting_time || goal.end_time) && (
+              <div className={`px-3 py-1.5 rounded-lg text-sm font-semibold ${
+                isCompleted
+                  ? 'bg-gray-100 text-gray-600'
+                  : goal.exceeds_end_time
+                  ? 'bg-orange-100 text-orange-700 border border-orange-300'
+                  : 'bg-blue-100 text-blue-700 border border-blue-300'
+              }`}>
+                🕐 {formatTime(goal.starting_time) || '--:--'} - {formatTime(goal.end_time) || '--:--'}
               </div>
             )}
           </div>
