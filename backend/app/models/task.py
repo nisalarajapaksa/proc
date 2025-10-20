@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Boolean, Text
+from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Boolean, Text, Time
 from sqlalchemy.orm import relationship
 from datetime import datetime
 from app.core.database import Base
@@ -12,6 +12,7 @@ class Task(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     confirmed = Column(Boolean, default=False)
+    starting_time = Column(Time, nullable=True)  # Starting time for first micro-goal
 
     # Relationship
     micro_goals = relationship("MicroGoal", back_populates="task", cascade="all, delete-orphan")
@@ -28,6 +29,8 @@ class MicroGoal(Base):
     order = Column(Integer, nullable=False)
     completed = Column(Boolean, default=False)
     created_at = Column(DateTime, default=datetime.utcnow)
+    starting_time = Column(Time, nullable=True)  # Calculated starting time
+    end_time = Column(Time, nullable=True)  # Calculated end time
 
     # Relationship
     task = relationship("Task", back_populates="micro_goals")

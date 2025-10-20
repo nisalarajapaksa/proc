@@ -77,18 +77,103 @@ export const MicroGoalCard: React.FC<MicroGoalCardProps> = ({
     );
   }
 
+  const formatTime = (timeString?: string) => {
+    if (!timeString) return null;
+    // timeString is in HH:MM:SS format, convert to HH:MM for display
+    const parts = timeString.split(':');
+    return `${parts[0]}:${parts[1]}`;
+  };
+
+  // Special rendering for break periods
+  if (goal.is_break) {
+    const isLongBreak = goal.break_type === 'long';
+    return (
+      <div className={`border-2 border-dashed rounded-lg p-4 transition-shadow ${
+        isLongBreak
+          ? 'bg-purple-50 border-purple-300'
+          : 'bg-cyan-50 border-cyan-300'
+      }`}>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className={`text-3xl ${isLongBreak ? 'animate-pulse' : ''}`}>
+              {isLongBreak ? '🌴' : '☕'}
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className={`text-lg font-semibold ${
+                  isLongBreak ? 'text-purple-900' : 'text-cyan-900'
+                }`}>
+                  {goal.title}
+                </h3>
+                <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
+                  isLongBreak
+                    ? 'bg-purple-200 text-purple-800'
+                    : 'bg-cyan-200 text-cyan-800'
+                }`}>
+                  Break Time
+                </span>
+              </div>
+              {goal.description && (
+                <p className={`text-sm mt-1 ${
+                  isLongBreak ? 'text-purple-700' : 'text-cyan-700'
+                }`}>
+                  {goal.description}
+                </p>
+              )}
+              <div className="flex items-center gap-2 mt-2">
+                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                  isLongBreak
+                    ? 'bg-purple-100 text-purple-800'
+                    : 'bg-cyan-100 text-cyan-800'
+                }`}>
+                  {formatMinutes(goal.estimated_minutes)}
+                </span>
+                {goal.starting_time && goal.end_time && (
+                  <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                    isLongBreak
+                      ? 'bg-purple-100 text-purple-800'
+                      : 'bg-cyan-100 text-cyan-800'
+                  }`}>
+                    {formatTime(goal.starting_time)} - {formatTime(goal.end_time)}
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Regular task rendering
   return (
-    <div className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm hover:shadow-md transition-shadow">
+    <div className={`bg-white border rounded-lg p-4 shadow-sm hover:shadow-md transition-shadow ${
+      goal.exceeds_end_time ? 'border-orange-300 bg-orange-50' : 'border-gray-200'
+    }`}>
       <div className="flex items-start justify-between">
         <div className="flex-1">
-          <h3 className="text-lg font-semibold text-gray-800 mb-1">{goal.title}</h3>
+          <div className="flex items-center gap-2 mb-1">
+            <h3 className="text-lg font-semibold text-gray-800">{goal.title}</h3>
+            {goal.exceeds_end_time && (
+              <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-orange-200 text-orange-800">
+                Overflow
+              </span>
+            )}
+          </div>
           {goal.description && (
             <p className="text-sm text-gray-600 mb-2">{goal.description}</p>
           )}
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
               {formatMinutes(goal.estimated_minutes)}
             </span>
+            {goal.starting_time && goal.end_time && (
+              <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                goal.exceeds_end_time ? 'bg-orange-100 text-orange-800' : 'bg-green-100 text-green-800'
+              }`}>
+                {formatTime(goal.starting_time)} - {formatTime(goal.end_time)}
+              </span>
+            )}
           </div>
         </div>
         {isEditable && (

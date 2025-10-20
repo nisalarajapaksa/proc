@@ -18,9 +18,13 @@ function TaskBreakdownApp() {
   const [breakdownResult, setBreakdownResult] = useState<TaskBreakdownResponse | null>(null);
   const { breakdown, confirm } = useTasks();
 
-  const handleTaskSubmit = async (tasksText: string) => {
+  const handleTaskSubmit = async (tasksText: string, startingTime?: string, endTime?: string) => {
     try {
-      const result = await breakdown.mutateAsync({ tasks_text: tasksText });
+      const result = await breakdown.mutateAsync({
+        tasks_text: tasksText,
+        starting_time: startingTime,
+        end_time: endTime
+      });
       setBreakdownResult(result);
     } catch (error) {
       console.error('Error breaking down tasks:', error);
