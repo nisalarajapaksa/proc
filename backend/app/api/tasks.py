@@ -194,7 +194,12 @@ async def confirm_tasks(
                 description=goal_data.description,
                 estimated_minutes=goal_data.estimated_minutes,
                 order=goal_data.order,
-                completed=goal_data.completed
+                completed=goal_data.completed,
+                starting_time=goal_data.starting_time,
+                end_time=goal_data.end_time,
+                exceeds_end_time=goal_data.exceeds_end_time,
+                is_break=goal_data.is_break,
+                break_type=goal_data.break_type
             )
             db.add(micro_goal)
 
