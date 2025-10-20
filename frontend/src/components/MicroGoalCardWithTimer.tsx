@@ -175,6 +175,38 @@ export const MicroGoalCardWithTimer: React.FC<MicroGoalCardWithTimerProps> = ({
 
         {/* Task Content */}
         <div className="flex-1">
+          {/* Prominent Time Display */}
+          {(goal.starting_time || goal.end_time) && (
+            <div className={`mb-3 px-3 py-2 rounded-lg border-l-4 ${
+              isCompleted
+                ? 'bg-gray-50 border-gray-400'
+                : goal.exceeds_end_time
+                ? 'bg-orange-50 border-orange-500'
+                : 'bg-blue-50 border-blue-500'
+            }`}>
+              <div className="flex items-center gap-2">
+                <span className="text-lg">🕐</span>
+                <div className="flex-1">
+                  <div className={`text-xs font-medium mb-0.5 ${
+                    isCompleted ? 'text-gray-500' : 'text-gray-600'
+                  }`}>
+                    Scheduled Time
+                  </div>
+                  <div className={`text-base font-bold ${
+                    isCompleted
+                      ? 'text-gray-600'
+                      : goal.exceeds_end_time
+                      ? 'text-orange-700'
+                      : 'text-blue-700'
+                  }`}>
+                    {formatTime(goal.starting_time) || '--:--'} - {formatTime(goal.end_time) || '--:--'}
+                    <span className="text-sm font-normal ml-2">({formatMinutes(goal.estimated_minutes)})</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
           <div className="flex items-start justify-between mb-2">
             <div className="flex-1">
               <div className="flex items-center gap-2 mb-1">
@@ -201,24 +233,6 @@ export const MicroGoalCardWithTimer: React.FC<MicroGoalCardWithTimerProps> = ({
                   {goal.description}
                 </p>
               )}
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                  isCompleted ? 'bg-gray-200 text-gray-600' : 'bg-blue-100 text-blue-800'
-                }`}>
-                  ⏱️ {formatMinutes(goal.estimated_minutes)}
-                </span>
-                {(goal.starting_time || goal.end_time) && (
-                  <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                    isCompleted
-                      ? 'bg-gray-200 text-gray-600'
-                      : goal.exceeds_end_time
-                      ? 'bg-orange-100 text-orange-800'
-                      : 'bg-green-100 text-green-800'
-                  }`}>
-                    🕐 {formatTime(goal.starting_time) || '--:--'} - {formatTime(goal.end_time) || '--:--'}
-                  </span>
-                )}
-              </div>
             </div>
           </div>
 
