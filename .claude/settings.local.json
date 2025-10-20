@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm create vite@latest . -- --template react-ts)",
+      "Bash(npm install)",
+      "Bash(npm install @tanstack/react-query axios zod react-hook-form @hookform/resolvers)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}
