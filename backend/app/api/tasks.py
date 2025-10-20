@@ -12,7 +12,8 @@ from app.schemas.task import (
     TaskConfirm,
     MicroGoalSchema,
     ExecutionEventSchema,
-    ExecutionSummary
+    ExecutionSummary,
+    ProgressDataResponse
 )
 from app.services.llm_service import llm_service
 
@@ -443,4 +444,76 @@ async def get_execution_summary(goal_id: int, db: Session = Depends(get_db)):
         started_at=micro_goal.actual_start_time,
         completed_at=micro_goal.actual_end_time,
         events=[ExecutionEventSchema.model_validate(e) for e in events]
+    )
+
+
+@router.get("/tasks/{task_id}/progress", response_model=ProgressDataResponse)
+async def get_task_progress(task_id: int, db: Session = Depends(get_db)):
+    """
+    Get progress summary for a task with AI-generated tips
+    """
+    task = db.query(Task).filter(Task.id == task_id).first()
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+
+    # Get all micro-goals (excluding breaks for counting)
+    all_goals = db.query(MicroGoal).filter(MicroGoal.task_id == task_id).order_by(MicroGoal.order).all()
+    work_goals = [g for g in all_goals if not g.is_break]
+
+    # Calculate statistics
+    total_tasks = len(work_goals)
+    completed_tasks = sum(1 for g in work_goals if g.completed)
+    total_planned_minutes = sum(g.estimated_minutes for g in work_goals)
+    total_actual_minutes = sum((g.time_spent_seconds or 0) / 60 for g in work_goals)
+
+    # Find current active task
+    current_task = next((g for g in work_goals if g.is_active), None)
+    current_task_title = current_task.title if current_task else None
+
+    # Count task statuses
+    on_time_tasks_count = sum(1 for g in work_goals if g.completed)
+    upcoming_tasks_count = sum(1 for g in work_goals if not g.completed and not g.is_active)
+    overdue_tasks_count = sum(1 for g in work_goals if not g.completed and g.exceeds_end_time)
+
+    # Prepare data for LLM
+    task_details = []
+    for goal in work_goals:
+        task_details.append({
+            "title": goal.title,
+            "estimated_minutes": goal.estimated_minutes,
+            "actual_minutes": round((goal.time_spent_seconds or 0) / 60, 1) if goal.time_spent_seconds else 0,
+            "completed": goal.completed,
+            "is_active": goal.is_active,
+            "exceeds_end_time": goal.exceeds_end_time
+        })
+
+    progress_data = {
+        "total_tasks": total_tasks,
+        "completed_tasks": completed_tasks,
+        "total_planned_minutes": total_planned_minutes,
+        "total_actual_minutes": int(total_actual_minutes),
+        "current_task_title": current_task_title,
+        "on_time_tasks_count": on_time_tasks_count,
+        "overdue_tasks_count": overdue_tasks_count,
+        "upcoming_tasks_count": upcoming_tasks_count,
+        "task_details": task_details
+    }
+
+    # Generate tips using LLM
+    try:
+        tips = await llm_service.generate_progress_tips(progress_data)
+    except Exception as e:
+        print(f"ERROR generating tips: {str(e)}")
+        tips = ["Keep up the good work!", "Stay focused on your goals.", "Take breaks when needed."]
+
+    return ProgressDataResponse(
+        total_tasks=total_tasks,
+        completed_tasks=completed_tasks,
+        total_planned_minutes=total_planned_minutes,
+        total_actual_minutes=int(total_actual_minutes),
+        current_task_title=current_task_title,
+        on_time_tasks_count=on_time_tasks_count,
+        overdue_tasks_count=overdue_tasks_count,
+        upcoming_tasks_count=upcoming_tasks_count,
+        tips=tips
     )

@@ -1,5 +1,5 @@
 import { apiClient } from './client';
-import type { TaskInput, TaskBreakdownResponse, TaskConfirm, TaskResponse, MicroGoal, ExecutionSummary } from '../types';
+import type { TaskInput, TaskBreakdownResponse, TaskConfirm, TaskResponse, MicroGoal, ExecutionSummary, ProgressDataResponse } from '../types';
 
 export const tasksApi = {
   /**
@@ -92,6 +92,14 @@ export const tasksApi = {
    */
   getExecutionSummary: async (goalId: number): Promise<ExecutionSummary> => {
     const response = await apiClient.get<ExecutionSummary>(`/tasks/micro-goals/${goalId}/execution-summary`);
+    return response.data;
+  },
+
+  /**
+   * Get task progress with AI-generated tips
+   */
+  getTaskProgress: async (taskId: number): Promise<ProgressDataResponse> => {
+    const response = await apiClient.get<ProgressDataResponse>(`/tasks/tasks/${taskId}/progress`);
     return response.data;
   },
 };

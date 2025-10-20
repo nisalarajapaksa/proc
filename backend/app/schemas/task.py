@@ -88,3 +88,16 @@ class ExecutionSummary(BaseModel):
     started_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None
     events: List[ExecutionEventSchema] = []
+
+
+class ProgressDataResponse(BaseModel):
+    """Progress data with AI-generated tips"""
+    total_tasks: int
+    completed_tasks: int
+    total_planned_minutes: int
+    total_actual_minutes: int
+    current_task_title: Optional[str] = None
+    on_time_tasks_count: int
+    overdue_tasks_count: int
+    upcoming_tasks_count: int
+    tips: List[str] = []

@@ -68,3 +68,15 @@ export interface TaskConfirm {
   task_id: number;
   micro_goals: MicroGoal[];
 }
+
+export interface ProgressDataResponse {
+  total_tasks: number;
+  completed_tasks: number;
+  total_planned_minutes: number;
+  total_actual_minutes: number;
+  current_task_title?: string;
+  on_time_tasks_count: number;
+  overdue_tasks_count: number;
+  upcoming_tasks_count: number;
+  tips: string[];
+}

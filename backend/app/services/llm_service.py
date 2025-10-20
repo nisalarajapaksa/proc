@@ -184,6 +184,130 @@ Return pure JSON only."""
             traceback.print_exc()
             raise Exception(f"Error calling Gemini API: {str(e)}")
 
+    async def generate_progress_tips(self, progress_data: Dict) -> List[str]:
+        """
+        Generate personalized tips based on user's current progress
+
+        Args:
+            progress_data: Dictionary containing:
+                - total_tasks: int
+                - completed_tasks: int
+                - total_planned_minutes: int
+                - total_actual_minutes: int
+                - current_task_title: str (optional)
+                - on_time_tasks_count: int
+                - overdue_tasks_count: int
+                - upcoming_tasks_count: int
+                - task_details: List of task info
+
+        Returns:
+            List of 3-5 personalized tips as strings
+        """
+
+        prompt = f"""You are a productivity coach analyzing a user's work session. Generate 3-5 personalized, actionable tips.
+
+Current Progress:
+- Total Tasks: {progress_data.get('total_tasks', 0)}
+- Completed: {progress_data.get('completed_tasks', 0)}
+- Upcoming: {progress_data.get('upcoming_tasks_count', 0)}
+- Behind Schedule: {progress_data.get('overdue_tasks_count', 0)}
+- Planned Time: {progress_data.get('total_planned_minutes', 0)} minutes
+- Actual Time: {progress_data.get('total_actual_minutes', 0)} minutes
+- Current Task: {progress_data.get('current_task_title', 'None')}
+
+Task Details:
+{json.dumps(progress_data.get('task_details', []), indent=2)}
+
+Generate 3-5 tips following these principles:
+
+1. 🧩 Include "why" - Connect to larger goals (e.g., "This builds toward your project completion")
+2. 🧘 Add mindset cues - Motivational reminders like "Start ugly – progress > perfection" or "Future you will thank you"
+3. 🚀 Apply 2-minute rule - If something can start in <2 min, say "Do Now"
+4. 🧭 Suggest time blocks - When tasks fit best (Morning Focus, Midday Sprint, Evening Wrap-up)
+5. 🏁 Reward milestones - After 2-3 Pomodoros, suggest breaks/rewards
+
+Tips should be:
+- Specific to their current situation
+- Actionable and practical
+- Encouraging but realistic
+- 2-3 sentences each
+- Use emojis sparingly for emphasis
+
+Return ONLY a JSON array of tip strings (no markdown):
+[
+  "Tip text here...",
+  "Another tip..."
+]
+
+Return pure JSON only."""
+
+        try:
+            loop = asyncio.get_event_loop()
+
+            from google.generativeai.types import HarmCategory, HarmBlockThreshold
+
+            safety_settings = [
+                {"category": HarmCategory.HARM_CATEGORY_HARASSMENT, "threshold": HarmBlockThreshold.BLOCK_NONE},
+                {"category": HarmCategory.HARM_CATEGORY_HATE_SPEECH, "threshold": HarmBlockThreshold.BLOCK_NONE},
+                {"category": HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, "threshold": HarmBlockThreshold.BLOCK_NONE},
+                {"category": HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, "threshold": HarmBlockThreshold.BLOCK_NONE},
+            ]
+
+            generate_func = partial(
+                self.model.generate_content,
+                prompt,
+                generation_config={
+                    'temperature': 0.8,  # Slightly higher for more creative tips
+                    'top_p': 0.95,
+                    'top_k': 40,
+                    'max_output_tokens': 2048,
+                },
+                safety_settings=safety_settings
+            )
+            response = await loop.run_in_executor(None, generate_func)
+
+            # Check response validity
+            if not response.candidates or len(response.candidates) == 0:
+                return ["Keep up the great work! 💪", "Take breaks when needed.", "Focus on one task at a time."]
+
+            candidate = response.candidates[0]
+
+            if not candidate.content or not candidate.content.parts:
+                return ["Stay focused on your current task.", "Remember to take breaks.", "You're making progress!"]
+
+            # Extract text
+            try:
+                content = response.text.strip()
+            except ValueError:
+                if candidate.content.parts:
+                    content = candidate.content.parts[0].text.strip()
+                else:
+                    return ["Keep going!", "You've got this!", "One step at a time."]
+
+            # Clean markdown
+            if content.startswith('```json'):
+                content = content[7:]
+            elif content.startswith('```'):
+                content = content[3:]
+            if content.endswith('```'):
+                content = content[:-3]
+
+            content = content.strip()
+
+            # Parse JSON
+            try:
+                tips = json.loads(content)
+                if isinstance(tips, list) and len(tips) > 0:
+                    return tips
+                return ["Keep pushing forward!", "Great progress so far!", "Stay consistent!"]
+            except json.JSONDecodeError:
+                print(f"ERROR: Failed to parse tips JSON: {content}")
+                return ["Focus on completing your current task.", "Take a short break if needed.", "You're doing well!"]
+
+        except Exception as e:
+            print(f"ERROR generating tips: {type(e).__name__}: {str(e)}")
+            return ["Stay focused!", "Keep up the momentum!", "You're making progress!"]
+
 
 # Singleton instance
 llm_service = LLMService()

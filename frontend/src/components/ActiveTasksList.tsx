@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
-import type { MicroGoal } from '../types';
+import type { MicroGoal, ProgressDataResponse } from '../types';
 import { MicroGoalCardWithTimer } from './MicroGoalCardWithTimer';
 import { TaskCompletionModal } from './TaskCompletionModal';
+import { ProgressOverlay } from './ProgressOverlay';
 import { tasksApi } from '../api/tasks';
 import { formatMinutes, calculateTotalMinutes } from '../utils/time';
 
@@ -13,13 +14,16 @@ interface ActiveTasksListProps {
 
 export const ActiveTasksList: React.FC<ActiveTasksListProps> = ({
   goals: initialGoals,
-  taskId: _taskId, // Kept for future use
+  taskId,
   onGoalsUpdate,
 }) => {
   const [goals, setGoals] = useState<MicroGoal[]>(initialGoals);
   const [completionModal, setCompletionModal] = useState<{ isOpen: boolean; goalId?: number; title?: string }>({
     isOpen: false,
   });
+  const [showProgressOverlay, setShowProgressOverlay] = useState(false);
+  const [progressData, setProgressData] = useState<ProgressDataResponse | null>(null);
+  const [isLoadingProgress, setIsLoadingProgress] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
   useEffect(() => {
@@ -42,6 +46,33 @@ export const ActiveTasksList: React.FC<ActiveTasksListProps> = ({
     // Play system notification sound (browser default)
     const audio = new Audio('data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAoUXrTp66hVFApGn+DyvmwhBSuBzvLZiTYIG2m98OScTgwOUKXh8bllHAU2jdXzzn0vBSJ1xe/glEILElyx5+ytWBQLRJve8cJwIQUqfs/y24o3CBtpvfDknE4MDlCl4fG5ZRwFNo3V885+LwUidcXv4JRCCxJcseftrVkUC0Sb3vHCcSEFKn/P8tyKNwgbab3w5JxODA5QpeHxuWUcBTaN1fPOfS8FInXF7+CUQgsSXLHn7a1ZFAtEm97xwnEhBSp/z/LcijcIG2m98OScTgwOUKXh8bllHAU2jdXzzn0vBSJ1xe/glEILElyx5+2tWRQLRJve8cJxIQUqf8/y3Io3CBtpvfDknE4MDlCl4fG5ZRwFNo3V885+LwUidcXv4JRCCxJcseftrVkUC0Sb3vHCcSEFKn/P8tyKNwgbab3w5JxODA5QpeHxuWUcBTaN1fPOfS8FInXF7+CUQgsSXLHn7a1ZFAtEm97xwnEhBSp/z/LcijcIG2m98OScTgwOUKXh8bllHAU2jdXzzn0vBSJ1xe/glEILElyx5+2tWRQLRJve8cJxIQUqf8/y3Io3CBtpvfDknE4MDlCl4fG5ZRwFNo3V885+LwUidcXv4JRCCxJcseftrVkUC0Sb3vHCcSEFKn/P8tyKNwgbab3w5JxODA5QpeHxuWUcBTaN1fPOfS8FInXF7+CUQgsSXLHn7a1ZFAtEm97xwnEhBSp/z/LcijcIG2m98OScTgwOUKXh8bllHAU2jdXzzn0vBSJ1xe/glEILElyx5+2tWRQLRJve8cJxIQUqf8/y3Io3CBtpvfDknE4MDlCl4fG5ZRwFNo3V885+LwUidcXv4JRCCxJcseftrVkUC0Sb3vHCcSEFKn/P8tyKNwgbab3w5JxODA5QpeHxuWUcBTaN1fPOfS8FInXF7+CUQgsSXLHn7a1ZFAtEm97xwnEhBSp/z/LcijcIG2m98OScTgwOUKXh8bllHAU2jdXzzn0vBSJ1xe/glEILElyx5+2tWRQLRJve8cJxIQUqf8/y3Io3CBtpvfDknE4MDlCl4fG5ZRwFNo3V885+LwUidcXv4JRCCxJcseftrVkUC0Sb3vHCcSEFKn/P8tyKNwgbab3w5JxODA5QpeHxuWUcBTaN1fPOfS8FInXF7+CUQgsSXLHn7a1ZFAtEm97xwnEhBSp/z/Lcij');
     audio.play().catch(e => console.log('Audio play failed:', e));
+  };
+
+  const handleShowProgress = async () => {
+    setShowProgressOverlay(true);
+    setIsLoadingProgress(true);
+
+    try {
+      const data = await tasksApi.getTaskProgress(taskId);
+      setProgressData(data);
+    } catch (error) {
+      console.error('Failed to fetch progress data:', error);
+      // Set fallback data
+      const workGoals = goals.filter(g => !g.is_break);
+      setProgressData({
+        total_tasks: workGoals.length,
+        completed_tasks: workGoals.filter(g => g.completed).length,
+        total_planned_minutes: workGoals.reduce((sum, g) => sum + g.estimated_minutes, 0),
+        total_actual_minutes: Math.round(workGoals.reduce((sum, g) => sum + (g.time_spent_seconds || 0) / 60, 0)),
+        current_task_title: workGoals.find(g => g.is_active)?.title,
+        on_time_tasks_count: workGoals.filter(g => g.completed).length,
+        overdue_tasks_count: workGoals.filter(g => !g.completed && g.exceeds_end_time).length,
+        upcoming_tasks_count: workGoals.filter(g => !g.completed && !g.is_active).length,
+        tips: ['Keep up the good work!', 'Stay focused on your current task.', 'Remember to take breaks!']
+      });
+    } finally {
+      setIsLoadingProgress(false);
+    }
   };
 
   const handleUpdateGoal = (index: number, updatedGoal: MicroGoal) => {
@@ -145,9 +176,20 @@ export const ActiveTasksList: React.FC<ActiveTasksListProps> = ({
       <div className="mb-6">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-2xl font-bold text-gray-800">Your Daily Tasks</h2>
-          <div className="text-right">
-            <p className="text-sm text-gray-600">Total Time</p>
-            <p className="text-2xl font-bold text-blue-600">{formatMinutes(totalMinutes)}</p>
+          <div className="flex items-center gap-4">
+            <button
+              onClick={handleShowProgress}
+              className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-600 to-blue-600 text-white rounded-lg font-semibold hover:from-purple-700 hover:to-blue-700 transition-all shadow-md hover:shadow-lg"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+              </svg>
+              View Progress
+            </button>
+            <div className="text-right">
+              <p className="text-sm text-gray-600">Total Time</p>
+              <p className="text-2xl font-bold text-blue-600">{formatMinutes(totalMinutes)}</p>
+            </div>
           </div>
         </div>
         <p className="text-gray-600">
@@ -215,6 +257,27 @@ export const ActiveTasksList: React.FC<ActiveTasksListProps> = ({
         onComplete={handleModalComplete}
         onClose={() => setCompletionModal({ isOpen: false })}
       />
+
+      {/* Progress Overlay */}
+      {progressData && (
+        <ProgressOverlay
+          isOpen={showProgressOverlay}
+          onClose={() => setShowProgressOverlay(false)}
+          goals={goals}
+          progressData={{
+            totalTasks: progressData.total_tasks,
+            completedTasks: progressData.completed_tasks,
+            totalPlannedMinutes: progressData.total_planned_minutes,
+            totalActualMinutes: progressData.total_actual_minutes,
+            currentTaskTitle: progressData.current_task_title,
+            onTimeTasksCount: progressData.on_time_tasks_count,
+            overdueTasksCount: progressData.overdue_tasks_count,
+            upcomingTasksCount: progressData.upcoming_tasks_count,
+            tips: progressData.tips
+          }}
+          isLoadingTips={isLoadingProgress}
+        />
+      )}
     </div>
   );
 };
