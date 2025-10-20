@@ -1,5 +1,5 @@
 import React from 'react';
-import { MicroGoal } from '../types';
+import type { MicroGoal } from '../types/index';
 
 interface ProgressData {
   totalTasks: number;
