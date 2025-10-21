@@ -1,5 +1,5 @@
 import { apiClient } from './client';
-import type { TaskInput, TaskBreakdownResponse, TaskConfirm, TaskResponse } from '../types';
+import type { TaskInput, TaskBreakdownResponse, TaskConfirm, TaskResponse, MicroGoal, ExecutionSummary, ProgressDataResponse } from '../types';
 
 export const tasksApi = {
   /**
@@ -41,5 +41,65 @@ export const tasksApi = {
    */
   delete: async (taskId: number): Promise<void> => {
     await apiClient.delete(`/tasks/${taskId}`);
+  },
+
+  // Pomodoro Timer Controls
+
+  /**
+   * Start a micro-goal timer
+   */
+  startMicroGoal: async (goalId: number): Promise<MicroGoal> => {
+    const response = await apiClient.post<MicroGoal>(`/tasks/micro-goals/${goalId}/start`);
+    return response.data;
+  },
+
+  /**
+   * Pause a micro-goal timer
+   */
+  pauseMicroGoal: async (goalId: number): Promise<MicroGoal> => {
+    const response = await apiClient.post<MicroGoal>(`/tasks/micro-goals/${goalId}/pause`);
+    return response.data;
+  },
+
+  /**
+   * Resume a paused micro-goal timer
+   */
+  resumeMicroGoal: async (goalId: number): Promise<MicroGoal> => {
+    const response = await apiClient.post<MicroGoal>(`/tasks/micro-goals/${goalId}/resume`);
+    return response.data;
+  },
+
+  /**
+   * Complete a micro-goal
+   */
+  completeMicroGoal: async (goalId: number): Promise<MicroGoal> => {
+    const response = await apiClient.post<MicroGoal>(`/tasks/micro-goals/${goalId}/complete`);
+    return response.data;
+  },
+
+  /**
+   * Update time spent on a micro-goal
+   */
+  updateTimeSpent: async (goalId: number, timeSpentSeconds: number): Promise<MicroGoal> => {
+    const response = await apiClient.patch<MicroGoal>(`/tasks/micro-goals/${goalId}/time`, null, {
+      params: { time_spent_seconds: timeSpentSeconds }
+    });
+    return response.data;
+  },
+
+  /**
+   * Get execution summary for a micro-goal (plan vs actual)
+   */
+  getExecutionSummary: async (goalId: number): Promise<ExecutionSummary> => {
+    const response = await apiClient.get<ExecutionSummary>(`/tasks/micro-goals/${goalId}/execution-summary`);
+    return response.data;
+  },
+
+  /**
+   * Get task progress with AI-generated tips
+   */
+  getTaskProgress: async (taskId: number): Promise<ProgressDataResponse> => {
+    const response = await apiClient.get<ProgressDataResponse>(`/tasks/tasks/${taskId}/progress`);
+    return response.data;
   },
 };

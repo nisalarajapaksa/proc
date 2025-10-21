@@ -4,13 +4,16 @@ from typing import List
 from datetime import datetime, timedelta
 
 from app.core.database import get_db
-from app.models.task import Task, MicroGoal
+from app.models.task import Task, MicroGoal, ExecutionEvent
 from app.schemas.task import (
     TaskInput,
     TaskBreakdownResponse,
     TaskResponse,
     TaskConfirm,
-    MicroGoalSchema
+    MicroGoalSchema,
+    ExecutionEventSchema,
+    ExecutionSummary,
+    ProgressDataResponse
 )
 from app.services.llm_service import llm_service
 
@@ -191,7 +194,12 @@ async def confirm_tasks(
                 description=goal_data.description,
                 estimated_minutes=goal_data.estimated_minutes,
                 order=goal_data.order,
-                completed=goal_data.completed
+                completed=goal_data.completed,
+                starting_time=goal_data.starting_time,
+                end_time=goal_data.end_time,
+                exceeds_end_time=goal_data.exceeds_end_time or False,
+                is_break=goal_data.is_break or False,
+                break_type=goal_data.break_type
             )
             db.add(micro_goal)
 
@@ -248,3 +256,269 @@ async def delete_task(task_id: int, db: Session = Depends(get_db)):
     db.commit()
 
     return {"message": "Task deleted successfully"}
+
+
+# Pomodoro Timer Control Endpoints
+
+@router.post("/micro-goals/{goal_id}/start", response_model=MicroGoalSchema)
+async def start_micro_goal(goal_id: int, db: Session = Depends(get_db)):
+    """
+    Start a micro-goal timer
+    """
+    # Stop any currently active micro-goals
+    db.query(MicroGoal).filter(MicroGoal.is_active == True).update({"is_active": False})
+
+    micro_goal = db.query(MicroGoal).filter(MicroGoal.id == goal_id).first()
+    if not micro_goal:
+        raise HTTPException(status_code=404, detail="Micro-goal not found")
+
+    if micro_goal.completed:
+        raise HTTPException(status_code=400, detail="Cannot start a completed task")
+
+    now = datetime.utcnow()
+    micro_goal.is_active = True
+    micro_goal.is_paused = False
+    if not micro_goal.actual_start_time:
+        micro_goal.actual_start_time = now
+
+    # Log execution event
+    event = ExecutionEvent(
+        micro_goal_id=goal_id,
+        action="start",
+        timestamp=now,
+        time_spent_at_event=micro_goal.time_spent_seconds or 0
+    )
+    db.add(event)
+
+    db.commit()
+    db.refresh(micro_goal)
+
+    return MicroGoalSchema.model_validate(micro_goal)
+
+
+@router.post("/micro-goals/{goal_id}/pause", response_model=MicroGoalSchema)
+async def pause_micro_goal(goal_id: int, db: Session = Depends(get_db)):
+    """
+    Pause a micro-goal timer
+    """
+    micro_goal = db.query(MicroGoal).filter(MicroGoal.id == goal_id).first()
+    if not micro_goal:
+        raise HTTPException(status_code=404, detail="Micro-goal not found")
+
+    if not micro_goal.is_active:
+        raise HTTPException(status_code=400, detail="Task is not active")
+
+    now = datetime.utcnow()
+    micro_goal.is_paused = True
+
+    # Log execution event
+    event = ExecutionEvent(
+        micro_goal_id=goal_id,
+        action="pause",
+        timestamp=now,
+        time_spent_at_event=micro_goal.time_spent_seconds or 0
+    )
+    db.add(event)
+
+    db.commit()
+    db.refresh(micro_goal)
+
+    return MicroGoalSchema.model_validate(micro_goal)
+
+
+@router.post("/micro-goals/{goal_id}/resume", response_model=MicroGoalSchema)
+async def resume_micro_goal(goal_id: int, db: Session = Depends(get_db)):
+    """
+    Resume a paused micro-goal timer
+    """
+    # Stop any currently active micro-goals
+    db.query(MicroGoal).filter(MicroGoal.is_active == True, MicroGoal.id != goal_id).update({"is_active": False})
+
+    micro_goal = db.query(MicroGoal).filter(MicroGoal.id == goal_id).first()
+    if not micro_goal:
+        raise HTTPException(status_code=404, detail="Micro-goal not found")
+
+    if not micro_goal.is_paused:
+        raise HTTPException(status_code=400, detail="Task is not paused")
+
+    now = datetime.utcnow()
+    micro_goal.is_paused = False
+
+    # Log execution event
+    event = ExecutionEvent(
+        micro_goal_id=goal_id,
+        action="resume",
+        timestamp=now,
+        time_spent_at_event=micro_goal.time_spent_seconds or 0
+    )
+    db.add(event)
+
+    db.commit()
+    db.refresh(micro_goal)
+
+    return MicroGoalSchema.model_validate(micro_goal)
+
+
+@router.post("/micro-goals/{goal_id}/complete", response_model=MicroGoalSchema)
+async def complete_micro_goal(goal_id: int, db: Session = Depends(get_db)):
+    """
+    Mark a micro-goal as completed
+    """
+    micro_goal = db.query(MicroGoal).filter(MicroGoal.id == goal_id).first()
+    if not micro_goal:
+        raise HTTPException(status_code=404, detail="Micro-goal not found")
+
+    now = datetime.utcnow()
+    micro_goal.completed = True
+    micro_goal.is_active = False
+    micro_goal.is_paused = False
+    micro_goal.actual_end_time = now
+
+    # Calculate total time spent
+    if micro_goal.actual_start_time:
+        time_diff = micro_goal.actual_end_time - micro_goal.actual_start_time
+        micro_goal.time_spent_seconds = int(time_diff.total_seconds())
+
+    # Log execution event
+    event = ExecutionEvent(
+        micro_goal_id=goal_id,
+        action="complete",
+        timestamp=now,
+        time_spent_at_event=micro_goal.time_spent_seconds or 0
+    )
+    db.add(event)
+
+    db.commit()
+    db.refresh(micro_goal)
+
+    return MicroGoalSchema.model_validate(micro_goal)
+
+
+@router.patch("/micro-goals/{goal_id}/time", response_model=MicroGoalSchema)
+async def update_time_spent(goal_id: int, time_spent_seconds: int, db: Session = Depends(get_db)):
+    """
+    Update the time spent on a micro-goal (for tracking elapsed time from frontend)
+    """
+    micro_goal = db.query(MicroGoal).filter(MicroGoal.id == goal_id).first()
+    if not micro_goal:
+        raise HTTPException(status_code=404, detail="Micro-goal not found")
+
+    micro_goal.time_spent_seconds = time_spent_seconds
+
+    db.commit()
+    db.refresh(micro_goal)
+
+    return MicroGoalSchema.model_validate(micro_goal)
+
+
+@router.get("/micro-goals/{goal_id}/execution-summary", response_model=ExecutionSummary)
+async def get_execution_summary(goal_id: int, db: Session = Depends(get_db)):
+    """
+    Get detailed execution summary comparing planned vs actual for a micro-goal
+    """
+    micro_goal = db.query(MicroGoal).filter(MicroGoal.id == goal_id).first()
+    if not micro_goal:
+        raise HTTPException(status_code=404, detail="Micro-goal not found")
+
+    # Get all execution events
+    events = db.query(ExecutionEvent).filter(
+        ExecutionEvent.micro_goal_id == goal_id
+    ).order_by(ExecutionEvent.timestamp).all()
+
+    # Calculate statistics
+    start_events = [e for e in events if e.action == "start"]
+    pause_events = [e for e in events if e.action == "pause"]
+    resume_events = [e for e in events if e.action == "resume"]
+    complete_events = [e for e in events if e.action == "complete"]
+
+    total_sessions = len(start_events) + len(resume_events)
+    total_pauses = len(pause_events)
+
+    actual_duration_seconds = micro_goal.time_spent_seconds or 0
+    actual_duration_minutes = actual_duration_seconds / 60.0
+    planned_duration_minutes = micro_goal.estimated_minutes
+    variance_minutes = actual_duration_minutes - planned_duration_minutes
+
+    return ExecutionSummary(
+        planned_duration_minutes=planned_duration_minutes,
+        actual_duration_seconds=actual_duration_seconds,
+        actual_duration_minutes=actual_duration_minutes,
+        variance_minutes=variance_minutes,
+        total_pauses=total_pauses,
+        total_sessions=total_sessions,
+        started_at=micro_goal.actual_start_time,
+        completed_at=micro_goal.actual_end_time,
+        events=[ExecutionEventSchema.model_validate(e) for e in events]
+    )
+
+
+@router.get("/tasks/{task_id}/progress", response_model=ProgressDataResponse)
+async def get_task_progress(task_id: int, db: Session = Depends(get_db)):
+    """
+    Get progress summary for a task with AI-generated tips
+    """
+    task = db.query(Task).filter(Task.id == task_id).first()
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+
+    # Get all micro-goals (excluding breaks for counting)
+    all_goals = db.query(MicroGoal).filter(MicroGoal.task_id == task_id).order_by(MicroGoal.order).all()
+    work_goals = [g for g in all_goals if not g.is_break]
+
+    # Calculate statistics
+    total_tasks = len(work_goals)
+    completed_tasks = sum(1 for g in work_goals if g.completed)
+    total_planned_minutes = sum(g.estimated_minutes for g in work_goals)
+    total_actual_minutes = sum((g.time_spent_seconds or 0) / 60 for g in work_goals)
+
+    # Find current active task
+    current_task = next((g for g in work_goals if g.is_active), None)
+    current_task_title = current_task.title if current_task else None
+
+    # Count task statuses
+    on_time_tasks_count = sum(1 for g in work_goals if g.completed)
+    upcoming_tasks_count = sum(1 for g in work_goals if not g.completed and not g.is_active)
+    overdue_tasks_count = sum(1 for g in work_goals if not g.completed and g.exceeds_end_time)
+
+    # Prepare data for LLM
+    task_details = []
+    for goal in work_goals:
+        task_details.append({
+            "title": goal.title,
+            "estimated_minutes": goal.estimated_minutes,
+            "actual_minutes": round((goal.time_spent_seconds or 0) / 60, 1) if goal.time_spent_seconds else 0,
+            "completed": goal.completed,
+            "is_active": goal.is_active,
+            "exceeds_end_time": goal.exceeds_end_time
+        })
+
+    progress_data = {
+        "total_tasks": total_tasks,
+        "completed_tasks": completed_tasks,
+        "total_planned_minutes": total_planned_minutes,
+        "total_actual_minutes": int(total_actual_minutes),
+        "current_task_title": current_task_title,
+        "on_time_tasks_count": on_time_tasks_count,
+        "overdue_tasks_count": overdue_tasks_count,
+        "upcoming_tasks_count": upcoming_tasks_count,
+        "task_details": task_details
+    }
+
+    # Generate tips using LLM
+    try:
+        tips = await llm_service.generate_progress_tips(progress_data)
+    except Exception as e:
+        print(f"ERROR generating tips: {str(e)}")
+        tips = ["Keep up the good work!", "Stay focused on your goals.", "Take breaks when needed."]
+
+    return ProgressDataResponse(
+        total_tasks=total_tasks,
+        completed_tasks=completed_tasks,
+        total_planned_minutes=total_planned_minutes,
+        total_actual_minutes=int(total_actual_minutes),
+        current_task_title=current_task_title,
+        on_time_tasks_count=on_time_tasks_count,
+        overdue_tasks_count=overdue_tasks_count,
+        upcoming_tasks_count=upcoming_tasks_count,
+        tips=tips
+    )
