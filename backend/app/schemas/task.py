@@ -20,8 +20,8 @@ class MicroGoalSchema(BaseModel):
     completed: bool = False
     starting_time: Optional[time] = None
     end_time: Optional[time] = None
-    exceeds_end_time: bool = False  # Flag to indicate if this task goes beyond the user's desired end time
-    is_break: bool = False  # Flag to indicate if this is a Pomodoro break
+    exceeds_end_time: bool | None = False  # Flag to indicate if this task goes beyond the user's desired end time
+    is_break: bool | None = False  # Flag to indicate if this is a Pomodoro break
     break_type: Optional[str] = None  # "short" (5 min) or "long" (15 min)
 
     # Pomodoro timer state (use Optional to handle None from DB)

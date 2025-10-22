@@ -480,17 +480,40 @@ async def get_task_progress(task_id: int, db: Session = Depends(get_db)):
     upcoming_tasks_count = sum(1 for g in work_goals if not g.completed and not g.is_active)
     overdue_tasks_count = sum(1 for g in work_goals if not g.completed and g.exceeds_end_time)
 
+    # Get current time for comparison
+    from datetime import datetime, time as dt_time
+    now = datetime.now()
+    current_time = now.time()
+
+    # Calculate time-based metrics
+    session_start_time = task.starting_time
+    first_task_start = work_goals[0].starting_time if work_goals and work_goals[0].starting_time else None
+    last_task_end = work_goals[-1].end_time if work_goals and work_goals[-1].end_time else None
+
     # Prepare data for LLM
     task_details = []
     for goal in work_goals:
-        task_details.append({
+        task_detail = {
             "title": goal.title,
             "estimated_minutes": goal.estimated_minutes,
             "actual_minutes": round((goal.time_spent_seconds or 0) / 60, 1) if goal.time_spent_seconds else 0,
             "completed": goal.completed,
             "is_active": goal.is_active,
-            "exceeds_end_time": goal.exceeds_end_time
-        })
+            "exceeds_end_time": goal.exceeds_end_time,
+            "scheduled_start": goal.starting_time.strftime("%H:%M") if goal.starting_time else None,
+            "scheduled_end": goal.end_time.strftime("%H:%M") if goal.end_time else None,
+        }
+
+        # Add status relative to current time
+        if goal.starting_time and goal.end_time:
+            if current_time < goal.starting_time:
+                task_detail["time_status"] = "upcoming"
+            elif goal.starting_time <= current_time <= goal.end_time:
+                task_detail["time_status"] = "should_be_active_now"
+            else:  # current_time > goal.end_time
+                task_detail["time_status"] = "past_scheduled_time"
+
+        task_details.append(task_detail)
 
     progress_data = {
         "total_tasks": total_tasks,
@@ -501,7 +524,11 @@ async def get_task_progress(task_id: int, db: Session = Depends(get_db)):
         "on_time_tasks_count": on_time_tasks_count,
         "overdue_tasks_count": overdue_tasks_count,
         "upcoming_tasks_count": upcoming_tasks_count,
-        "task_details": task_details
+        "task_details": task_details,
+        "current_time": current_time.strftime("%H:%M"),
+        "session_start_time": session_start_time.strftime("%H:%M") if session_start_time else None,
+        "first_task_start": first_task_start.strftime("%H:%M") if first_task_start else None,
+        "last_task_end": last_task_end.strftime("%H:%M") if last_task_end else None,
     }
 
     # Generate tips using LLM
