@@ -31,6 +31,9 @@ class MicroGoal(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     starting_time = Column(Time, nullable=True)  # Calculated starting time
     end_time = Column(Time, nullable=True)  # Calculated end time
+    exceeds_end_time = Column(Boolean, default=False)  # Whether task exceeds user's desired end time
+    is_break = Column(Boolean, default=False)  # Whether this is a Pomodoro break
+    break_type = Column(String(10), nullable=True)  # "short" or "long" break type
 
     # Pomodoro timer state
     is_active = Column(Boolean, default=False)  # Currently running

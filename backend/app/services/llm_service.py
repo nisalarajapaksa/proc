@@ -204,7 +204,7 @@ Return pure JSON only."""
             List of 3-5 personalized tips as strings
         """
 
-        prompt = f"""You are a productivity coach analyzing a user's work session. Generate 3-5 personalized, actionable tips.
+        prompt = f"""You are an expert productivity coach analyzing a user's work session. Generate EXACTLY 3 SHORT personalized tips based on their current progress and patterns.
 
 Current Progress:
 - Total Tasks: {progress_data.get('total_tasks', 0)}
@@ -215,31 +215,67 @@ Current Progress:
 - Actual Time: {progress_data.get('total_actual_minutes', 0)} minutes
 - Current Task: {progress_data.get('current_task_title', 'None')}
 
-Task Details:
+Time Context:
+- Current Time: {progress_data.get('current_time', 'Unknown')}
+- Session Started: {progress_data.get('session_start_time', 'Unknown')}
+- First Task Scheduled: {progress_data.get('first_task_start', 'Unknown')}
+- Last Task Ends: {progress_data.get('last_task_end', 'Unknown')}
+
+Task Details (with scheduled times):
 {json.dumps(progress_data.get('task_details', []), indent=2)}
 
 Generate 3-5 tips following these principles:
 
+**Core Principles:**
 1. 🧩 Include "why" - Connect to larger goals (e.g., "This builds toward your project completion")
 2. 🧘 Add mindset cues - Motivational reminders like "Start ugly – progress > perfection" or "Future you will thank you"
 3. 🚀 Apply 2-minute rule - If something can start in <2 min, say "Do Now"
 4. 🧭 Suggest time blocks - When tasks fit best (Morning Focus, Midday Sprint, Evening Wrap-up)
 5. 🏁 Reward milestones - After 2-3 Pomodoros, suggest breaks/rewards
 
-Tips should be:
-- Specific to their current situation
-- Actionable and practical
-- Encouraging but realistic
-- 2-3 sentences each
-- Use emojis sparingly for emphasis
+**Context-Aware Intelligence:**
+6. 🎯 Detect patterns - If consistently over/under estimating time, suggest recalibration strategies
+7. ⚡ Energy management - Match task difficulty with likely energy levels throughout the day
+8. 🔄 Task switching - If many incomplete tasks, suggest deep focus strategies to reduce context switching
+9. 🧠 Cognitive load - If many complex tasks, suggest grouping similar work or taking strategic breaks
+10. ✅ Quick wins - Identify easy completions for building momentum and confidence
+11. ⏰ Time awareness - If actual >> planned consistently, suggest breaking tasks into smaller chunks
+12. 🏃 Deadline intelligence - If time is limited, suggest triage and prioritization strategies
+13. 📊 Progress reflection - Acknowledge achievements and suggest realistic next steps
+14. ⚠️ Risk alerts - Gently warn if current pace might affect downstream tasks
+15. 🎁 Completion incentive - "Just X more tasks until [milestone]" to maintain motivation
 
-Return ONLY a JSON array of tip strings (no markdown):
+**Time-Based Intelligence (IMPORTANT):**
+16. ⏱️ Schedule adherence - Compare current time to scheduled start/end times for each task
+17. 🚨 Behind schedule alerts - If tasks with "past_scheduled_time" status aren't completed, suggest catching up
+18. ⏳ Time remaining - Calculate how much time is left until last_task_end and adjust urgency
+19. 🎯 Next task timing - If current time is before next task's scheduled start, suggest preparation or early start
+20. 📅 Realistic expectations - If too many tasks remain for time available, suggest prioritization
+21. 🕐 Pacing guidance - Based on time_status field, give specific advice (e.g., "You should be working on Task X now based on your schedule")
+
+**Adaptive Tone Based on Situation:**
+- If AHEAD of schedule: Positive reinforcement + optional stretch goals
+- If BEHIND schedule: Practical triage without guilt-tripping, focus on what matters most
+- If STUCK on one task: Suggest breaking it down, taking a strategic break, or asking for help
+- If COMPLETING many tasks: Celebrate momentum while gently warning against burnout
+- If NO tasks active: Encourage starting with the easiest or most important task
+
+Tips should be:
+- Specific to their current situation and data patterns
+- Actionable and practical with clear next steps
+- Encouraging but realistic (no toxic positivity)
+- **CONCISE: Maximum 1-2 sentences per tip** (this is critical!)
+- Use emojis sparingly for emphasis (max 1 per tip)
+- Personalized based on actual progress metrics
+- **IMPORTANT: Keep tips SHORT to avoid truncation**
+
+Return ONLY a JSON array of tip strings (no markdown, no code blocks):
 [
   "Tip text here...",
   "Another tip..."
 ]
 
-Return pure JSON only."""
+Return pure JSON only. Keep each tip to 1-2 sentences maximum."""
 
         try:
             loop = asyncio.get_event_loop()
@@ -260,7 +296,7 @@ Return pure JSON only."""
                     'temperature': 0.8,  # Slightly higher for more creative tips
                     'top_p': 0.95,
                     'top_k': 40,
-                    'max_output_tokens': 2048,
+                    'max_output_tokens': 4096,  # Increased to avoid truncation with enhanced prompt
                 },
                 safety_settings=safety_settings
             )
@@ -271,6 +307,13 @@ Return pure JSON only."""
                 return ["Keep up the great work! 💪", "Take breaks when needed.", "Focus on one task at a time."]
 
             candidate = response.candidates[0]
+
+            # Check finish reason for truncation
+            finish_reason_value = int(candidate.finish_reason) if hasattr(candidate.finish_reason, '__int__') else candidate.finish_reason
+            finish_reason_name = candidate.finish_reason.name if hasattr(candidate.finish_reason, 'name') else str(finish_reason_value)
+
+            if finish_reason_value == 2 or finish_reason_name == 'MAX_TOKENS':
+                print(f"WARNING: Tips response may be truncated due to max tokens limit")
 
             if not candidate.content or not candidate.content.parts:
                 return ["Stay focused on your current task.", "Remember to take breaks.", "You're making progress!"]
@@ -294,14 +337,27 @@ Return pure JSON only."""
 
             content = content.strip()
 
+            # Fix incomplete JSON if necessary
+            if not content.endswith(']'):
+                print(f"WARNING: Tips response appears incomplete!")
+                # Find the last complete tip (ending with quote)
+                last_quote = content.rfind('"')
+                if last_quote != -1:
+                    # Find the quote before that (start of last complete tip)
+                    quote_before = content.rfind('"', 0, last_quote)
+                    if quote_before != -1:
+                        # Truncate to last complete tip and add closing bracket
+                        content = content[:last_quote + 1] + '\n]'
+                        print(f"DEBUG: Fixed incomplete tips JSON by truncating to last complete tip")
+
             # Parse JSON
             try:
                 tips = json.loads(content)
                 if isinstance(tips, list) and len(tips) > 0:
                     return tips
                 return ["Keep pushing forward!", "Great progress so far!", "Stay consistent!"]
-            except json.JSONDecodeError:
-                print(f"ERROR: Failed to parse tips JSON: {content}")
+            except json.JSONDecodeError as e:
+                print(f"ERROR: Failed to parse tips JSON: {content[:200]}... Error: {str(e)}")
                 return ["Focus on completing your current task.", "Take a short break if needed.", "You're doing well!"]
 
         except Exception as e:

@@ -38,8 +38,37 @@ export const ProgressOverlay: React.FC<ProgressOverlayProps> = ({
     ? Math.round((progressData.totalActualMinutes / progressData.totalPlannedMinutes) * 100)
     : 0;
 
-  const isAheadOfSchedule = timePercentage < completionPercentage;
-  const isBehindSchedule = timePercentage > completionPercentage + 10;
+  // Calculate schedule-based progress (how much of the scheduled timeline has passed)
+  const calculateScheduleProgress = () => {
+    const workGoals = goals.filter(g => !g.is_break);
+    if (workGoals.length === 0) return 0;
+
+    const firstGoal = workGoals[0];
+    const lastGoal = workGoals[workGoals.length - 1];
+
+    if (!firstGoal.starting_time || !lastGoal.end_time) return 0;
+
+    const now = new Date();
+    const currentMinutes = now.getHours() * 60 + now.getMinutes();
+
+    const [startHours, startMins] = firstGoal.starting_time.split(':').map(Number);
+    const sessionStartMinutes = startHours * 60 + startMins;
+
+    const [endHours, endMins] = lastGoal.end_time.split(':').map(Number);
+    const sessionEndMinutes = endHours * 60 + endMins;
+
+    const totalSessionMinutes = sessionEndMinutes - sessionStartMinutes;
+    const elapsedMinutes = currentMinutes - sessionStartMinutes;
+
+    if (elapsedMinutes < 0) return 0; // Session hasn't started yet
+    if (elapsedMinutes > totalSessionMinutes) return 100; // Session has ended
+
+    return Math.round((elapsedMinutes / totalSessionMinutes) * 100);
+  };
+
+  const scheduleProgress = calculateScheduleProgress();
+  const isAheadOfSchedule = completionPercentage > scheduleProgress + 5;
+  const isBehindSchedule = completionPercentage < scheduleProgress - 5;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4">
@@ -113,6 +142,53 @@ export const ProgressOverlay: React.FC<ProgressOverlayProps> = ({
             </div>
           </div>
 
+          {/* Schedule Timeline Progress */}
+          {scheduleProgress > 0 && (
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <h3 className="font-semibold text-gray-700">Schedule Timeline Progress</h3>
+                <span className="text-2xl font-bold text-indigo-600">{scheduleProgress}%</span>
+              </div>
+              <div className="w-full bg-gray-200 rounded-full h-4 overflow-hidden relative">
+                {/* Schedule elapsed bar (background) */}
+                <div
+                  className="absolute top-0 left-0 bg-gray-300 h-4 transition-all duration-500"
+                  style={{ width: `${scheduleProgress}%` }}
+                />
+                {/* Task completion bar (foreground) */}
+                <div
+                  className={`relative h-4 rounded-full transition-all duration-500 flex items-center justify-end pr-2 ${
+                    isAheadOfSchedule
+                      ? 'bg-gradient-to-r from-green-500 to-green-600'
+                      : isBehindSchedule
+                      ? 'bg-gradient-to-r from-red-500 to-red-600'
+                      : 'bg-gradient-to-r from-indigo-500 to-indigo-600'
+                  }`}
+                  style={{ width: `${completionPercentage}%` }}
+                >
+                  {completionPercentage > 10 && (
+                    <span className="text-xs text-white font-semibold">
+                      {progressData.completedTasks}/{progressData.totalTasks}
+                    </span>
+                  )}
+                </div>
+              </div>
+              <div className="flex justify-between text-xs text-gray-600 mt-1">
+                <span>Timeline: {scheduleProgress}% elapsed</span>
+                <span>Tasks: {completionPercentage}% completed</span>
+              </div>
+              {isAheadOfSchedule && (
+                <p className="text-sm text-green-600 mt-1 font-medium">✓ You're ahead of schedule! Keep up the great pace! 🎉</p>
+              )}
+              {isBehindSchedule && (
+                <p className="text-sm text-red-600 mt-1 font-medium">⚠ Behind schedule - consider focusing on priority tasks</p>
+              )}
+              {!isAheadOfSchedule && !isBehindSchedule && (
+                <p className="text-sm text-indigo-600 mt-1 font-medium">→ Right on track! Maintain your current pace</p>
+              )}
+            </div>
+          )}
+
           {/* Time Progress */}
           <div>
             <div className="flex items-center justify-between mb-2">
@@ -121,13 +197,7 @@ export const ProgressOverlay: React.FC<ProgressOverlayProps> = ({
             </div>
             <div className="w-full bg-gray-200 rounded-full h-4 overflow-hidden">
               <div
-                className={`h-4 rounded-full transition-all duration-500 flex items-center justify-end pr-2 ${
-                  isAheadOfSchedule
-                    ? 'bg-gradient-to-r from-green-500 to-green-600'
-                    : isBehindSchedule
-                    ? 'bg-gradient-to-r from-red-500 to-red-600'
-                    : 'bg-gradient-to-r from-purple-500 to-purple-600'
-                }`}
+                className="bg-gradient-to-r from-purple-500 to-purple-600 h-4 rounded-full transition-all duration-500 flex items-center justify-end pr-2"
                 style={{ width: `${Math.min(timePercentage, 100)}%` }}
               >
                 {timePercentage > 10 && (
@@ -137,12 +207,9 @@ export const ProgressOverlay: React.FC<ProgressOverlayProps> = ({
                 )}
               </div>
             </div>
-            {isAheadOfSchedule && (
-              <p className="text-sm text-green-600 mt-1">You're ahead of schedule! 🎉</p>
-            )}
-            {isBehindSchedule && (
-              <p className="text-sm text-red-600 mt-1">Taking longer than planned - consider adjusting your approach</p>
-            )}
+            <p className="text-sm text-gray-600 mt-1">
+              Actual work time vs total estimated time
+            </p>
           </div>
 
           {/* AI Tips Section */}
